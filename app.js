@@ -94,34 +94,16 @@ function bell(t,f,dur,vol){
   out.gain.setValueAtTime(vol,t);out.gain.exponentialRampToValueAtTime(0.0001,t+dur);out.connect(c.destination);
   [[1,1],[2.76,.5],[5.4,.25],[8.93,.12]].forEach(([r,a])=>{const o=c.createOscillator(),g=c.createGain();o.type="sine";o.frequency.value=f*r;g.gain.value=a;o.connect(g);g.connect(out);o.start(t);o.stop(t+dur)});
 }
-function jingleHit(t,vol){
-  /* one shake: a cluster of tiny metal bells, each with two bright partials and a quick decay */
-  const c=SND.ctx,n=8+Math.floor(Math.random()*4);
-  for(let i=0;i<n;i++){
-    const tt=t+Math.random()*.035,f=2400+Math.random()*3800,d=.12+Math.random()*.22,peak=vol*2.4/n;
-    [[1,1],[2.41,.35]].forEach(([r,a])=>{
-      const o=c.createOscillator(),g=c.createGain();o.type="sine";o.frequency.value=f*r;
-      g.gain.setValueAtTime(0.0001,tt);g.gain.exponentialRampToValueAtTime(peak*a,tt+.004);g.gain.exponentialRampToValueAtTime(0.0001,tt+d);
-      o.connect(g);g.connect(c.destination);o.start(tt);o.stop(tt+d+.02);
-    });
-  }
-}
-function sleigh(t,dur,vol){
-  /* sleigh-bell rhythm: ch-ch-ch-CHING, repeated */
-  const groups=[[0,.55],[.13,.55],[.26,.6],[.42,1]];
-  for(let x=0;x<dur;x+=.62)groups.forEach(([p,a])=>{if(x+p<dur)jingleHit(t+x+p,vol*a)});
-}
 const NOTE={C5:523.25,D5:587.33,E5:659.25,G5:783.99,C6:1046.5,E6:1318.5,G6:1568};
 const SOUNDS={
   boxing(){const t=SND.ctx.currentTime+.02;[0,.32,.64].forEach(d=>bell(t+d,1180,1.6,.35))},
-  ding(){const t=SND.ctx.currentTime+.02;bell(t,1180,1.4,.3);sleigh(t+.05,.5,.18)},
+  ding(){const t=SND.ctx.currentTime+.02;bell(t,1180,1.4,.3)},
   reveal(){const t=SND.ctx.currentTime+.02;[NOTE.C6,NOTE.E6,NOTE.G6].forEach((f,i)=>bell(t+i*.11,f,1.2,.18))},
-  shake(){const t=SND.ctx.currentTime+.02;[NOTE.C5,NOTE.E5,NOTE.G5].forEach((f,i)=>bell(t+i*.14,f,.9,.2));bell(t+.42,NOTE.C6,1.8,.26);sleigh(t+.42,.62,.22)},
+  shake(){const t=SND.ctx.currentTime+.02;[NOTE.C5,NOTE.E5,NOTE.G5].forEach((f,i)=>bell(t+i*.14,f,.9,.2));bell(t+.42,NOTE.C6,1.8,.26)},
   tick(){bell(SND.ctx.currentTime+.01,1760,.35,.12)},
   jingle(){const t=SND.ctx.currentTime+.05,b=.24;let x=0;
     [["E5",1],["E5",1],["E5",2],["E5",1],["E5",1],["E5",2],["E5",1],["G5",1],["C5",1.5],["D5",.5],["E5",4]]
-      .forEach(([n,l])=>{bell(t+x*b,NOTE[n],Math.max(.6,l*b*1.6),.22);x+=l});
-    sleigh(t,x*b+.4,.18)}
+      .forEach(([n,l])=>{bell(t+x*b,NOTE[n],Math.max(.6,l*b*1.6),.22);x+=l});}
 };
 function play(name){try{if(SND.on&&S.view==="beamer"&&soundReady())SOUNDS[name]()}catch(e){}}
 function testSound(name){const c=actx();if(!c)return;const go=()=>{try{SOUNDS[name]()}catch(e){}};c.state==="running"?go():c.resume().then(go).catch(()=>{})}
