@@ -78,9 +78,62 @@ function correctText(q){
 function publicQ(q,i){return {id:q.id,round:q.round||"",type:q.type,nl:q.nl,en:q.en||"",options:q.type==="mc"?q.options:undefined,seconds:q.seconds||30,points:q.points||1,unit:q.unit||"",index:i,total:S.questions.length}}
 function revealFor(q){return {qid:q.id,answer:q.type==="estimate"?q.answer:q.type==="mc"?q.answer:String(q.answer),text:correctText(q),results:qResult(q)}}
 
+
+/* ---------- sound (beamer only, synthesized in the browser) ---------- */
+const SND={ctx:null,on:ls("champ-sound")!=="off"};
+function actx(){
+  if(!SND.ctx){const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;SND.ctx=new C()}
+  if(SND.ctx.state==="suspended")SND.ctx.resume().then(()=>{if(S.view==="beamer")render()}).catch(()=>{});
+  return SND.ctx;
+}
+document.addEventListener("pointerdown",()=>{if(S.view==="beamer")actx()},true);
+document.addEventListener("keydown",()=>{if(S.view==="beamer")actx()},true);
+const soundReady=()=>!!(SND.ctx&&SND.ctx.state==="running");
+function bell(t,f,dur,vol){
+  const c=SND.ctx,out=c.createGain();
+  out.gain.setValueAtTime(vol,t);out.gain.exponentialRampToValueAtTime(0.0001,t+dur);out.connect(c.destination);
+  [[1,1],[2.76,.5],[5.4,.25],[8.93,.12]].forEach(([r,a])=>{const o=c.createOscillator(),g=c.createGain();o.type="sine";o.frequency.value=f*r;g.gain.value=a;o.connect(g);g.connect(out);o.start(t);o.stop(t+dur)});
+}
+let noiseBuf;
+function noise(){const c=SND.ctx;if(!noiseBuf){noiseBuf=c.createBuffer(1,c.sampleRate,c.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1}return noiseBuf}
+function sleigh(t,dur,vol){
+  const c=SND.ctx;
+  for(let x=0;x<dur;x+=0.075){
+    const s=c.createBufferSource(),hp=c.createBiquadFilter(),pk=c.createBiquadFilter(),g=c.createGain(),tt=t+x+Math.random()*.015;
+    s.buffer=noise();hp.type="highpass";hp.frequency.value=7000;pk.type="peaking";pk.frequency.value=9500;pk.gain.value=8;
+    g.gain.setValueAtTime(0.0001,tt);g.gain.exponentialRampToValueAtTime(vol*(.6+Math.random()*.4),tt+.005);g.gain.exponentialRampToValueAtTime(0.0001,tt+.07);
+    s.connect(hp);hp.connect(pk);pk.connect(g);g.connect(c.destination);s.start(tt,Math.random()*.5);s.stop(tt+.08);
+  }
+}
+const NOTE={C5:523.25,D5:587.33,E5:659.25,G5:783.99,C6:1046.5,E6:1318.5,G6:1568};
+const SOUNDS={
+  boxing(){const t=SND.ctx.currentTime+.02;[0,.32,.64].forEach(d=>bell(t+d,1180,1.6,.35))},
+  ding(){const t=SND.ctx.currentTime+.02;bell(t,1180,1.4,.3);sleigh(t,.45,.15)},
+  reveal(){const t=SND.ctx.currentTime+.02;[NOTE.C6,NOTE.E6,NOTE.G6].forEach((f,i)=>bell(t+i*.11,f,1.2,.18))},
+  shake(){sleigh(SND.ctx.currentTime+.02,1.2,.22)},
+  tick(){bell(SND.ctx.currentTime+.01,1760,.35,.12)},
+  jingle(){const t=SND.ctx.currentTime+.05,b=.24;let x=0;
+    [["E5",1],["E5",1],["E5",2],["E5",1],["E5",1],["E5",2],["E5",1],["G5",1],["C5",1.5],["D5",.5],["E5",4]]
+      .forEach(([n,l])=>{bell(t+x*b,NOTE[n],Math.max(.6,l*b*1.6),.22);x+=l});
+    sleigh(t,x*b+.4,.18)}
+};
+function play(name){try{if(SND.on&&S.view==="beamer"&&soundReady())SOUNDS[name]()}catch(e){}}
+function soundForChange(prev,next){
+  if(!prev||!next||(prev.phase===next.phase&&prev.q===next.q))return;
+  const p=next.phase;
+  if(p==="question"){
+    if(prev.phase==="reveal"&&prev.q===next.q)return;
+    const newRound=prev.phase==="lobby"||prev.phase==="scores"||(prev.current?.round||"")!==(next.current?.round||"");
+    play(newRound?"boxing":"ding");
+  }else if(p==="reveal"&&prev.phase==="question"&&prev.q===next.q)play("reveal");
+  else if(p==="scores")play("shake");
+  else if(p==="final")play("jingle");
+}
+function setState(st){const prev=S.state;S.state=st;soundForChange(prev,st)}
+
 /* ---------- data ---------- */
 async function rpc(fn,args){const {data,error}=await sb.rpc(fn,args);if(error)throw error;return data}
-async function loadState(){const {data,error}=await sb.from("game_state").select("*").eq("id",1).maybeSingle();if(error)throw error;S.state=data}
+async function loadState(){const {data,error}=await sb.from("game_state").select("*").eq("id",1).maybeSingle();if(error)throw error;setState(data)}
 async function loadTeams(){const {data,error}=await sb.from("teams").select("*");if(error)throw error;const t={};(data||[]).forEach(r=>t[r.slot]=r);S.teams=t}
 async function loadLockins(){const {data,error}=await sb.from("lockins").select("*");if(error)throw error;S.lockins=data||[]}
 async function loadHost(){if(!isHost())return;S.questions=(await rpc("host_get_questions",{p_pin:S.pin}))||[];S.answers=(await rpc("host_answers",{p_pin:S.pin}))||[]}
@@ -94,7 +147,7 @@ async function refresh(all){
 let debT;function soon(fn){clearTimeout(debT);debT=setTimeout(fn,150)}
 function subscribe(){
   sb.channel("quiz")
-    .on("postgres_changes",{event:"*",schema:"public",table:"game_state"},p=>{if(p.new&&p.new.id===1){S.state=p.new;S.confirmReset=false;render()}})
+    .on("postgres_changes",{event:"*",schema:"public",table:"game_state"},p=>{if(p.new&&p.new.id===1){setState(p.new);S.confirmReset=false;render()}})
     .on("postgres_changes",{event:"*",schema:"public",table:"teams"},()=>soon(async()=>{try{await loadTeams()}catch(e){}render()}))
     .on("postgres_changes",{event:"*",schema:"public",table:"lockins"},()=>soon(async()=>{try{await loadLockins();await loadAnswers()}catch(e){}render()}))
     .subscribe();
@@ -205,15 +258,16 @@ function viewChooser(){
 
 function lockRail(reveal){
   const c=cur();if(!c)return "";
-  const ls_=lockinsFor(c.id),res=reveal?(S.state?.reveal?.results||{}):{};
+  const ls_=lockinsFor(c.id),res=reveal?(S.state?.reveal?.results||{}):{};let anyNew=false;
   const cells=joined().map(t=>{
     const i=ls_.findIndex(a=>a.slot===t.slot),a=ls_[i];
-    const key=c.id+t.slot,isNew=a&&!S.seen.has(key);if(a)S.seen.add(key);
+    const key=c.id+t.slot,isNew=a&&!S.seen.has(key);if(a)S.seen.add(key);if(isNew&&!reveal)anyNew=true;
     let st=`<span class="ls waiting">denkt na</span>`;
     if(a)st=`<span class="ls tab">${ord(i+1)} · ${secs(a.ms)}</span>`;
     if(reveal){const r=res[t.slot];st=`<span class="pts tab ${r&&r.pts?"":"zero"}">+${r?r.pts:0}${r?.speed?' <span class="note">⚡ snelst</span>':""}</span>`}
     return `<div class="lock ${a?"in":""} ${isNew?"pop":""}"><div class="ln">${dot(t.slot)}<span>${esc(t.name)}</span></div>${st}</div>`;
   });
+  if(anyNew)setTimeout(()=>play("tick"),0);
   return `<div class="lockrail">${cells.join("")||`<p class="note">Nog geen teams aangemeld.</p>`}</div>`;
 }
 
@@ -281,8 +335,9 @@ function hostBar(){
   return `<div class="hostbar" id="hostbar"><button class="btn ghost small" data-act="prev" ${prevStep()?"":"disabled"}>◀ Terug</button>
     ${n?`<button class="btn" data-act="next" ${S.busy?"disabled":""}>${n.label} ▶</button>`:(S.questions.length?"":`<span class="note">Laad eerst vragen via de afstandsbediening</span>`)}
     ${phase()==="reveal"?`<button class="btn ghost small" data-act="scores">Tussenstand</button>`:""}
-    <button class="btn ghost small" data-act="fs">Volledig scherm</button>${conf}
-    <span class="keys">Spatie = verder · ← terug · S = stand</span></div>`;
+    <button class="btn ghost small" data-act="fs">Volledig scherm</button>
+    <button class="btn ghost small" data-act="sound" aria-pressed="${SND.on}">${!SND.on?"Geluid uit":soundReady()?"Geluid aan":"Klik voor geluid"}</button>${conf}
+    <span class="keys">Spatie = verder · ← terug · S = stand · M = geluid</span></div>`;
 }
 function viewBeamer(){
   const p=phase();
@@ -405,6 +460,7 @@ document.addEventListener("click",e=>{
   else if(a==="reset"){S.confirmReset=true;render()}
   else if(a==="reset-no"){S.confirmReset=false;render()}
   else if(a==="reset-yes")resetGame();
+  else if(a==="sound"){SND.on=!SND.on;ls("champ-sound",SND.on?"on":"off");actx();setTimeout(()=>{play("ding");render()},120)}
   else if(a==="fs"){const el=document.documentElement;(el.requestFullscreen?el.requestFullscreen():Promise.reject()).catch(()=>{})}
   else if(a==="join")joinTeam();
   else if(a==="pin")login();
@@ -427,6 +483,7 @@ document.addEventListener("keydown",e=>{
   if(e.key===" "||e.key==="ArrowRight"||e.key==="PageDown"){e.preventDefault();go(nextStep())}
   else if(e.key==="ArrowLeft"||e.key==="PageUp"){e.preventDefault();go(prevStep())}
   else if(e.key==="s"||e.key==="S"){if(phase()==="reveal")go({phase:"scores",q:curIdx()})}
+  else if(e.key==="m"||e.key==="M"){SND.on=!SND.on;ls("champ-sound",SND.on?"on":"off");setTimeout(()=>{play("ding");render()},120)}
 });
 window.addEventListener("hashchange",()=>{S.err="";render()});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh(isHost())});
