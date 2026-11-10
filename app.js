@@ -118,6 +118,7 @@ const SOUNDS={
     sleigh(t,x*b+.4,.18)}
 };
 function play(name){try{if(SND.on&&S.view==="beamer"&&soundReady())SOUNDS[name]()}catch(e){}}
+function testSound(name){const c=actx();if(!c)return;const go=()=>{try{SOUNDS[name]()}catch(e){}};c.state==="running"?go():c.resume().then(go).catch(()=>{})}
 function soundForChange(prev,next){
   if(!prev||!next||(prev.phase===next.phase&&prev.q===next.q))return;
   const p=next.phase;
@@ -253,7 +254,17 @@ function viewChooser(){
     <button class="choose-card" data-go="beamer"><h3>Beamer</h3><p>Het grote scherm met QR-code, vragen en scores. Bedien met spatie en pijltjes.</p><p class="en">Projector screen with built-in host controls.</p></button>
     <button class="choose-card" data-go="remote"><h3>Afstandsbediening</h3><p>Antwoorden zien, open vragen nakijken, vragen laden en doorklikken.</p><p class="en">Quiz master remote.</p></button>
     <button class="choose-card" data-go="team"><h3>Teamtelefoon</h3><p>Wat de teams zien na het scannen. Handig om zelf te testen.</p><p class="en">The team phone view.</p></button>
-  </div><p class="note">Teams die de QR scannen zien dit scherm niet.</p><button class="btn ghost small" style="justify-self:center" data-act="logout">Uitloggen als quizmaster</button></div>`;
+  </div>
+  <div class="panel" style="text-align:left"><div class="eyebrow">Geluiden testen · Test the sounds</div>
+    <div class="rowbtns" style="flex-wrap:wrap">
+      <button class="btn ghost small" data-snd="boxing">Nieuwe ronde</button>
+      <button class="btn ghost small" data-snd="ding">Volgende vraag</button>
+      <button class="btn ghost small" data-snd="tick">Team zet vast</button>
+      <button class="btn ghost small" data-snd="reveal">Antwoord</button>
+      <button class="btn ghost small" data-snd="shake">Tussenstand</button>
+      <button class="btn ghost small" data-snd="jingle">Finale</button>
+    </div></div>
+  <p class="note">Teams die de QR scannen zien dit scherm niet.</p><button class="btn ghost small" style="justify-self:center" data-act="logout">Uitloggen als quizmaster</button></div>`;
 }
 
 function lockRail(reveal){
@@ -450,6 +461,7 @@ document.addEventListener("mousemove",wakeHostbar);
 document.addEventListener("click",e=>{
   const b=e.target.closest("button");if(!b)return;
   if(b.dataset.go){location.hash=b.dataset.go==="team"?"":b.dataset.go;S.err="";render();return}
+  if(b.dataset.snd){testSound(b.dataset.snd);return}
   if(b.dataset.pick){S.pick=b.dataset.pick;S.err="";render();return}
   if(b.dataset.sel!==undefined){S.draft[cur().id]=+b.dataset.sel;render();return}
   if(b.dataset.mark){const [qid,slot]=b.dataset.mark.split("|");markAnswer(qid,slot,b.dataset.v==="1");return}
