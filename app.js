@@ -228,7 +228,7 @@ async function submitAnswer(value){
 function mySent(qid){return S.draft["sent-"+qid]}
 
 /* ---------- views ---------- */
-function brand(sub=true){return `<div class="brand"><span class="dof">Dinner of</span><h1>CHAMPIONS</h1>${sub?`<div class="divider">✦</div><div class="eyebrow">De Kerstquiz <span class="en" style="text-transform:none;letter-spacing:0">· The Christmas Quiz</span></div>`:""}</div>`}
+function brand(sub=true){return `<div class="brand"><span class="dof">De Kerstquiz</span><h1>CHAMPIONS</h1>${sub?`<div class="divider">✦</div><div class="en brand-en">The Christmas Quiz</div>`:""}</div>`}
 
 function viewPin(){
   return `<div class="choose">${brand()}<div class="panel" style="max-width:420px;margin-inline:auto;width:100%">
